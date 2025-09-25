@@ -49,3 +49,8 @@ OU (caso receba o Aviso: "nennhuma fonte TTF encontrada.")
 ```
 
 obs: pode ser feita a substituição do dog.png por qualquer imagem png, jpg ou bmp de sua escolha
+
+# Exemplo de execução:
+
+<img width="1483" height="805" alt="image" src="https://github.com/user-attachments/assets/c28e78ab-cf55-4744-a277-9f85cae3dcbb" />
+
