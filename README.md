@@ -36,4 +36,12 @@ gcc processadorIMG.c -o processador flas-> vou por
 ```bash
 .\processador dog.png
 ```
+
+OU (em caso do Aviso: "nennhuma fonte TTF encontrada.")
+
+**Executar com:**
+```bash
+.\processador dog.png "C:\Windows\Fonts\arial.ttf"
+```
+
 obs: pode ser feita a substituição do dog.png por qualquer imagem png, jpg ou bmp de sua escolha
