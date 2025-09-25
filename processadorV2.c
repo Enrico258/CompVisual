@@ -6,6 +6,14 @@
 #include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
+/* 
+Integrantes:
+
+Enrico Cuono Alves Pereira - 10402875
+Gabriel Mason Guerino - 10409928
+Eduardo Honorio Friaça - 10408959
+*/
+
 #define BINS_HIST   256
 #define LARG_HUD    420
 #define ALT_HUD     520
@@ -39,12 +47,14 @@ typedef struct {
     int       ttf_ok; // 1=tem fonte carregada; 0=fallback sem TTF
 } EstadoTexto;
 
-// pode mudar as struct se precisar 
-
 /* --------- Assinaturas ---------- */
 SDL_Surface *carregar_imagem(const char *caminho);
 SDL_Surface *converter_para_cinza(SDL_Surface *src);
 int          detectar_grayscale(SDL_Surface *s);
+
+void         calcular_histograma(SDL_Surface *gs, int hist[BINS_HIST]);
+void         equalizar_histograma(SDL_Surface *src, SDL_Surface **out);
+void         calc_media_desvio(const int hist[BINS_HIST], double *media, double *desvio);
 
 int           tentar_carregar_fonte(EstadoTexto *et, const char *arg_font);
 SDL_Texture  *renderizar_texto(SDL_Renderer *r, TTF_Font *fonte, const char *txt, SDL_Color cor);
@@ -83,12 +93,15 @@ int main(int argc, char *argv[]) {
     SDL_Surface *carregada = carregar_imagem(caminho_img);
     if (!carregada) { SDL_Quit(); if (et.fonte) TTF_CloseFont(et.fonte); TTF_Quit(); SDL_Quit(); return 1; }
 
-    // Se precisar converte pra cinza
+    // Detecta e, se necessário, converte para cinza (sempre padroniza Y=0.2125R+0.7154G+0.0721B)
     int ja_cinza = detectar_grayscale(carregada);
     SDL_Surface *gs = converter_para_cinza(carregada);
     SDL_DestroySurface(carregada);
     if (!gs) { fprintf(stderr, "Falha na conversão p/ cinza\n");
         SDL_Quit(); if (et.fonte) TTF_CloseFont(et.fonte); TTF_Quit(); SDL_Quit(); return 1; }
+
+    SDL_Surface *eq = NULL;
+    equalizar_histograma(gs, &eq);
 
     EstadoImagem img = {0};
     img.origem_gs = gs;
@@ -97,7 +110,7 @@ int main(int argc, char *argv[]) {
     img.esta_equalizado = 0;
 
     // Janela principal (tamanho = imagem), centralizada
-    SDL_Window *jan_princ = SDL_CreateWindow("Processador IMG", img.atual->w, img.atual->h, 0);
+    SDL_Window *jan_princ = SDL_CreateWindow("Proj1 - Imagem", img.atual->w, img.atual->h, 0);
     if (!jan_princ) {
         fprintf(stderr, "Janela principal falhou: %s\n", SDL_GetError());
         if (eq) SDL_DestroySurface(eq);
@@ -148,6 +161,12 @@ int main(int argc, char *argv[]) {
 
     SDL_Texture *tex_img = SDL_CreateTextureFromSurface(ren_princ, img.atual);
 
+    // Histograma + métricas
+    int    hist[BINS_HIST] = {0};
+    double media=0.0, desvio=0.0;
+    calcular_histograma(img.atual, hist);
+    calc_media_desvio(hist, &media, &desvio);
+
     int rodando = 1;
     int estado_btn = 0; // 0=neutro,1=hover,2=pressionado
 
@@ -180,9 +199,19 @@ int main(int argc, char *argv[]) {
                         if (dentro && ev.button.button == SDL_BUTTON_LEFT) estado_btn = 2;
                     } else if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP) {
                         if (ev.button.button == SDL_BUTTON_LEFT) {
-                            if (estado_btn == 2 && dentro) {   
-                                printf("OI")                             
-                                // aqui vc coloca a função do clique no btn
+                            if (estado_btn == 2 && dentro) {
+                                // toggle equalização
+                                if (!img.esta_equalizado) {
+                                    img.atual = img.equalizada;
+                                    img.esta_equalizado = 1;
+                                } else {
+                                    img.atual = img.origem_gs;
+                                    img.esta_equalizado = 0;
+                                }
+                                if (tex_img) SDL_DestroyTexture(tex_img);
+                                tex_img = SDL_CreateTextureFromSurface(ren_princ, img.atual);
+                                calcular_histograma(img.atual, hist);
+                                calc_media_desvio(hist, &media, &desvio);
                             }
                             estado_btn = dentro ? 1 : 0;
                         }
@@ -300,6 +329,73 @@ SDL_Surface *converter_para_cinza(SDL_Surface *src) {
 
     SDL_UnlockSurface(out); SDL_UnlockSurface(src);
     return out;
+}
+
+void calcular_histograma(SDL_Surface *gs, int hist[BINS_HIST]) {
+    for (int i=0;i<BINS_HIST;i++) hist[i]=0;
+    SDL_LockSurface(gs);
+    int w = gs->w;
+    int h = gs->h;
+
+    const SDL_PixelFormatDetails *fmt = SDL_GetPixelFormatDetails(gs->format);
+    int bpp = fmt->bytes_per_pixel;
+    int pitch = gs->pitch;
+
+    Uint8 *px=(Uint8*)gs->pixels;
+    for (int y=0;y<h;y++) for (int x=0;x<w;x++) {
+        Uint8 *p = px + y*pitch + x*bpp;
+        Uint8 v = p[0]; // RGB24: R==G==B
+        hist[v]++;
+    }
+    SDL_UnlockSurface(gs);
+}
+
+void equalizar_histograma(SDL_Surface *src, SDL_Surface **out) {
+    int hist[BINS_HIST]; calcular_histograma(src, hist);
+    int total = src->w * src->h;
+    double cdf[BINS_HIST]; int acc=0;
+    for (int i=0;i<BINS_HIST;i++){ acc+=hist[i]; cdf[i]=(double)acc/(double)total; }
+    
+    SDL_Surface *dest = SDL_CreateSurface(src->w, src->h, SDL_PIXELFORMAT_RGB24);
+
+    if (!dest){ *out=NULL; return; }
+
+    SDL_LockSurface(src); SDL_LockSurface(dest);
+    Uint8 *ps=(Uint8*)src->pixels, *pd=(Uint8*)dest->pixels;
+    int w = src->w;
+    int h = src->h;
+
+    const SDL_PixelFormatDetails *fmt = SDL_GetPixelFormatDetails(src->format);
+    int bpp = fmt->bytes_per_pixel;
+
+    int pitch_s = src->pitch;
+    int pitch_d = dest->pitch;
+
+
+    for (int y=0;y<h;y++) for (int x=0;x<w;x++) {
+        Uint8 *sp = ps + y*pitch_s + x*bpp;
+        Uint8 v = sp[0];
+        Uint8 m = (Uint8)floor(cdf[v]*255.0 + 0.5);
+        Uint8 *dp = pd + y*pitch_d + x*3;
+        dp[0]=m; dp[1]=m; dp[2]=m;
+    }
+
+    SDL_UnlockSurface(dest); SDL_UnlockSurface(src);
+    *out = dest;
+}
+
+void calc_media_desvio(const int hist[BINS_HIST], double *media, double *desvio) {
+    long total=0; double soma=0.0;
+    for (int i=0;i<BINS_HIST;i++){ total+=hist[i]; soma += (double)i * (double)hist[i]; }
+    if (total==0){ *media=0; *desvio=0; return; }
+    *media = soma / (double)total;
+    double var=0.0;
+    for (int i=0;i<BINS_HIST;i++){
+        double d = (double)i - *media;
+        var += d*d * (double)hist[i];
+    }
+    var /= (double)total;
+    *desvio = sqrt(var);
 }
 
 /* ---------- Texto (SDL_ttf) ---------- */
