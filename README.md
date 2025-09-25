@@ -10,11 +10,7 @@ Eduardo Honorio Friaça - 10408959
 
 # Resumo do projeto:
 
-O projeto consiste em um software processador de imagens desenvolvido em C as bibliotecas SDL3, SDL3_image e SDL3_TTF. O programa é executado via linha de comando em um formato padrão, exemplo: 
-
-```bash
-.\processador dog.png
-```
+O projeto consiste em um software processador de imagens desenvolvido em C, fazendo uso das bibliotecas SDL3, SDL3_image e SDL3_TTF. 
 
 **Suas principais funcionalidades incluem:**
 - Carregamento e tratamento de erros no acesso da imagem e exibição de interface gráfica com duas janelas (a principal para mostrar a imagem e a secundária para exibir o histograma), além da possibilidade de salvar a imagem processada em arquivo. **Responsável: Enrico**
