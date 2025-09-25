@@ -1,8 +1,12 @@
 # Projeto 1 - Computação Visual
 
+**Integrantes:**
+
 Enrico Cuono Alves Pereira - 10402875
 
 Gabriel Mason Guerino - 10409928
+
+Eduardo Honorio Friaça - 10408959
 
 # Resumo do projeto:
 
