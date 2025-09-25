@@ -28,7 +28,12 @@ git clone https://github.com/Enrico258/CompVisual.git
 ### 2. Compilar
 
 ```bash
-gcc processadorIMG.c -o processador flas-> vou por
+gcc processadorV2.c -o processador -IC:/libs/SDL3/include -LC:/libs/SDL3/lib -lSDL3 -IC:/libs/SDL3_image/include -LC:/libs/SDL3_image/lib -lSDL3_image -IC:/libs/SDL3_ttf/include -LC:/libs/SDL3_ttf/lib -lSDL3_ttf
+```
+OU (caso as libs estejam instaladas no disco local D):
+
+```bash
+gcc processadorV2.c -o processador -ID:/libs/SDL3/include -LD:/libs/SDL3/lib -lSDL3 -ID:/libs/SDL3_image/include -LD:/libs/SDL3_image/lib -lSDL3_image -ID:/libs/SDL3_ttf/include -LD:/libs/SDL3_ttf/lib -lSDL3_ttf
 ```
 
 ### 3. Execução
@@ -37,9 +42,8 @@ gcc processadorIMG.c -o processador flas-> vou por
 .\processador dog.png
 ```
 
-OU (em caso do Aviso: "nennhuma fonte TTF encontrada.")
+OU (caso receba o Aviso: "nennhuma fonte TTF encontrada.")
 
-**Executar com:**
 ```bash
 .\processador dog.png "C:\Windows\Fonts\arial.ttf"
 ```
