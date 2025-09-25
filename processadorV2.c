@@ -46,6 +46,9 @@ SDL_Surface *carregar_imagem(const char *caminho);
 
 int           tentar_carregar_fonte(EstadoTexto *et, const char *arg_font);
 SDL_Texture  *renderizar_texto(SDL_Renderer *r, TTF_Font *fonte, const char *txt, SDL_Color cor);
+
+// coloca aqui as assinaturas das funções de vcs
+
 void          desenhar_hud(SDL_Renderer *r, EstadoTexto *et, int hist[BINS_HIST],
                            double media, double desvio, int equalizado, int estado_btn);
 void          desenhar_botao(SDL_Renderer *r, EstadoTexto *et, int x, int y, int w, int h,
@@ -81,7 +84,7 @@ int main(int argc, char *argv[]) {
     SDL_Surface *carregada = carregar_imagem(caminho_img);
     if (!carregada) { SDL_Quit(); if (et.fonte) TTF_CloseFont(et.fonte); TTF_Quit(); SDL_Quit(); return 1; }
 
-    // Janela principal (tamanho = imagem), centralizada
+    // Janela principal
     SDL_Window *jan_princ = SDL_CreateWindow("Processadora de IMG", img.atual->w, img.atual->h, 0);
     if (!jan_princ) {
         fprintf(stderr, "Janela principal falhou: %s\n", SDL_GetError());
@@ -101,6 +104,7 @@ int main(int argc, char *argv[]) {
     // Janela HUD (ao lado da principal).
     int x0, y0; SDL_GetWindowPosition(jan_princ, &x0, &y0);SDL_Window *jan_hud = SDL_CreateWindow("HUD - Histograma",
                                        LARG_HUD, ALT_HUD, 0);
+                                       
     if (!jan_hud) {
         fprintf(stderr, "Janela HUD falhou: %s\n", SDL_GetError());
         SDL_DestroyRenderer(ren_princ);
@@ -210,6 +214,8 @@ SDL_Surface *carregar_imagem(const char *caminho) {
     if (!s) fprintf(stderr, "IMG_Load falhou: %s\n", SDL_GetError());
     return s;
 }
+
+// aqui as funções de histograma e do gray scale
 
 /* ---------- Texto (SDL_ttf) ---------- */
 int tentar_carregar_fonte(EstadoTexto *et, const char *arg_font) {
