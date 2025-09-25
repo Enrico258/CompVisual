@@ -16,7 +16,7 @@
 #define BTN_W 160
 #define BTN_H 44
 
-// Definição de Cores
+// Cores
 static const SDL_Color COR_AZUL_NEUTRO = { 30,144,255,255 };
 static const SDL_Color COR_AZUL_HOVER  = {100,180,255,255 };
 static const SDL_Color COR_AZUL_PRESS  = {  0, 70,160,255 };
@@ -43,12 +43,11 @@ typedef struct {
 
 /* --------- Assinaturas ---------- */
 SDL_Surface *carregar_imagem(const char *caminho);
+SDL_Surface *converter_para_cinza(SDL_Surface *src);
+int          detectar_grayscale(SDL_Surface *s);
 
 int           tentar_carregar_fonte(EstadoTexto *et, const char *arg_font);
 SDL_Texture  *renderizar_texto(SDL_Renderer *r, TTF_Font *fonte, const char *txt, SDL_Color cor);
-
-// coloca aqui as assinaturas das funções de vcs
-
 void          desenhar_hud(SDL_Renderer *r, EstadoTexto *et, int hist[BINS_HIST],
                            double media, double desvio, int equalizado, int estado_btn);
 void          desenhar_botao(SDL_Renderer *r, EstadoTexto *et, int x, int y, int w, int h,
@@ -84,8 +83,21 @@ int main(int argc, char *argv[]) {
     SDL_Surface *carregada = carregar_imagem(caminho_img);
     if (!carregada) { SDL_Quit(); if (et.fonte) TTF_CloseFont(et.fonte); TTF_Quit(); SDL_Quit(); return 1; }
 
-    // Janela principal
-    SDL_Window *jan_princ = SDL_CreateWindow("Processadora de IMG", img.atual->w, img.atual->h, 0);
+    // Se precisar converte pra cinza
+    int ja_cinza = detectar_grayscale(carregada);
+    SDL_Surface *gs = converter_para_cinza(carregada);
+    SDL_DestroySurface(carregada);
+    if (!gs) { fprintf(stderr, "Falha na conversão p/ cinza\n");
+        SDL_Quit(); if (et.fonte) TTF_CloseFont(et.fonte); TTF_Quit(); SDL_Quit(); return 1; }
+
+    EstadoImagem img = {0};
+    img.origem_gs = gs;
+    img.equalizada = eq;
+    img.atual = img.origem_gs;
+    img.esta_equalizado = 0;
+
+    // Janela principal (tamanho = imagem), centralizada
+    SDL_Window *jan_princ = SDL_CreateWindow("Processador IMG", img.atual->w, img.atual->h, 0);
     if (!jan_princ) {
         fprintf(stderr, "Janela principal falhou: %s\n", SDL_GetError());
         if (eq) SDL_DestroySurface(eq);
@@ -101,10 +113,9 @@ int main(int argc, char *argv[]) {
         SDL_Quit(); if (et.fonte) TTF_CloseFont(et.fonte); TTF_Quit(); SDL_Quit(); return 1;
     }
 
-    // Janela HUD (ao lado da principal).
+    // Janela HUD (ao lado da principal). 
     int x0, y0; SDL_GetWindowPosition(jan_princ, &x0, &y0);SDL_Window *jan_hud = SDL_CreateWindow("HUD - Histograma",
                                        LARG_HUD, ALT_HUD, 0);
-                                       
     if (!jan_hud) {
         fprintf(stderr, "Janela HUD falhou: %s\n", SDL_GetError());
         SDL_DestroyRenderer(ren_princ);
@@ -169,8 +180,8 @@ int main(int argc, char *argv[]) {
                         if (dentro && ev.button.button == SDL_BUTTON_LEFT) estado_btn = 2;
                     } else if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP) {
                         if (ev.button.button == SDL_BUTTON_LEFT) {
-                            if (estado_btn == 2 && dentro) {
-                                printf("OI")
+                            if (estado_btn == 2 && dentro) {   
+                                printf("OI")                             
                                 // aqui vc coloca a função do clique no btn
                             }
                             estado_btn = dentro ? 1 : 0;
@@ -215,7 +226,81 @@ SDL_Surface *carregar_imagem(const char *caminho) {
     return s;
 }
 
-// aqui as funções de histograma e do gray scale
+int detectar_grayscale(SDL_Surface *s) {
+    int w = s->w;
+    int h = s->h;
+    
+    const SDL_PixelFormatDetails *fmt = SDL_GetPixelFormatDetails(s->format);
+    int bpp = fmt->bytes_per_pixel;
+
+    SDL_LockSurface(s);
+    Uint8 *px = (Uint8*)s->pixels;
+    int step_x = (w>200)?(w/100):1, step_y=(h>200)?(h/100):1;
+    for (int y=0;y<h;y+=step_y) for (int x=0;x<w;x+=step_x) {
+        Uint8 *p = px + y*s->pitch + x*bpp;
+        Uint32 pix=0;
+        switch (bpp) {
+            case 1: pix = p[0]; break;
+            case 2: pix = p[0]|(p[1]<<8); break;
+            case 3:
+            #if SDL_BYTEORDER == SDL_BIG_ENDIAN
+                pix = p[0]<<16 | p[1]<<8 | p[2];
+            #else
+                pix = p[0] | p[1]<<8 | p[2]<<16;
+            #endif
+                break;
+            default: pix = p[0]|(p[1]<<8)|(p[2]<<16)|((bpp==4)?(p[3]<<24):0); break;
+        }
+        Uint8 r,g,b,a; 
+        const SDL_PixelFormatDetails *fmt = SDL_GetPixelFormatDetails(s->format);
+        int bpp = fmt->bytes_per_pixel;
+        SDL_GetRGBA(pix, fmt, NULL, &r,&g,&b,&a);
+        if (!(r==g && g==b)) { SDL_UnlockSurface(s); return 0; }
+    }
+    SDL_UnlockSurface(s);
+    return 1;
+}
+
+SDL_Surface *converter_para_cinza(SDL_Surface *src) {
+    int w=src->w, h=src->h;
+    SDL_Surface *out = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_RGB24);
+    if (!out) return NULL;
+
+    SDL_LockSurface(src); SDL_LockSurface(out);
+    Uint8 *ps=(Uint8*)src->pixels, *pd=(Uint8*)out->pixels;
+    const SDL_PixelFormatDetails *fmt = SDL_GetPixelFormatDetails(src->format);
+    int bpp_s = fmt->bytes_per_pixel;
+    int pitch_s = src->pitch;
+    int pitch_d = out->pitch;
+
+    for (int y=0;y<h;y++) for (int x=0;x<w;x++) {
+        Uint8 *sp = ps + y*pitch_s + x*bpp_s;
+        Uint32 pix=0;
+        switch (bpp_s) {
+            case 1: pix = sp[0]; break;
+            case 2: pix = sp[0]|(sp[1]<<8); break;
+            case 3:
+            #if SDL_BYTEORDER == SDL_BIG_ENDIAN
+                pix = sp[0]<<16 | sp[1]<<8 | sp[2];
+            #else
+                pix = sp[0] | sp[1]<<8 | sp[2]<<16;
+            #endif
+                break;
+            default: pix = sp[0]|(sp[1]<<8)|(sp[2]<<16)|((bpp_s==4)?(sp[3]<<24):0); break;
+        }
+        const SDL_PixelFormatDetails *fmt = SDL_GetPixelFormatDetails(src->format);
+        Uint8 r,g,b,a;
+        SDL_GetRGBA(pix, fmt, NULL, &r, &g, &b, &a);
+        double Y = 0.2125*(double)r + 0.7154*(double)g + 0.0721*(double)b;
+        if (Y<0) Y=0; if (Y>255) Y=255;
+        Uint8 yv = (Uint8)(Y+0.5);
+        Uint8 *dp = pd + y*pitch_d + x*3;
+        dp[0]=yv; dp[1]=yv; dp[2]=yv;
+    }
+
+    SDL_UnlockSurface(out); SDL_UnlockSurface(src);
+    return out;
+}
 
 /* ---------- Texto (SDL_ttf) ---------- */
 int tentar_carregar_fonte(EstadoTexto *et, const char *arg_font) {
@@ -303,7 +388,7 @@ void desenhar_hud(SDL_Renderer *r, EstadoTexto *et, int hist[BINS_HIST],
     int hw=LARG_HUD-2*pad, hh=320;
     int hx=pad, hy=pad;
 
-    // fundo
+    // fundo histograma
     fill(r, hx, hy, hw, hh, (SDL_Color){40,40,40,255});
 
     // barras
